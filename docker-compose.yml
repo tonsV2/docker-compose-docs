@@ -3,4 +3,6 @@ services:
     image: tons/docker-compose-docs:latest
     build: .
     volumes:
-      - ./tests:/src
+      - .:/src:ro
+    environment:
+      DOCKER_COMPOSE_FILE_PATHS: /src;/src/tests
