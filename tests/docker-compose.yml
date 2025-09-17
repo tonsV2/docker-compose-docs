@@ -1,0 +1,16 @@
+services:
+  web:
+    image: nginx
+    environment:
+      # -- Port number for the web server
+      PORT: 8080
+      # -- Database connection string
+      DATABASE_URL: postgresql://localhost/myapp
+
+  api:
+    image: myapi
+    environment:
+      # -- API key for external service
+      - API_KEY=default-key
+      - # -- Debug mode flag. Can be true | false
+      - DEBUG=false

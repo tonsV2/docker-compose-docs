@@ -1,0 +1,6 @@
+services:
+  app:
+    image: tons/docker-compose-docs:latest
+    build: .
+    volumes:
+      - ./tests:/src
