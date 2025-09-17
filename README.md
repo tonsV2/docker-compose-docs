@@ -4,12 +4,20 @@ Generate documentation for environment variables in your Docker Compose files.
 
 This tool is inspired by [helm-docs](https://github.com/norwoodj/helm-docs).
 
+## Quick start
+
+Git clone this repository and run the below command to generate documentation for the Docker Compose file in the `tests` directory:
+
+```bash
+./main.py tests/docker-compose.yml
+```
+
 ## How it works
 
 The tool scans your Docker Compose files for environment variables with comments starting with `# --`.  
 These comments are turned into documentation tables in Markdown format.
 
-## Run the tool
+## Integrate with your project
 
 There are many ways to run the tool and pass it your Docker Compose files. However, the most common use case is probably
 to include this in your own `docker-compose.yml` and run it from there.
