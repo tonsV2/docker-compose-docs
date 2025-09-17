@@ -8,6 +8,7 @@ that are commented with '# -- <description>' format.
 
 import os
 import re
+import glob
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional
@@ -256,100 +257,193 @@ class OutputGenerator(ABC):
     """Abstract base class for output generators."""
 
     @abstractmethod
-    def generate(self, services_doc: ServicesDoc) -> str:
-        """Generate output from service documentation."""
+    def generate(self, services_docs: List[ServicesDoc]) -> str:
+        """Generate output from a list of service documentation objects."""
         pass
 
 
 class MarkdownGenerator(OutputGenerator):
     """Generates Markdown documentation from service documentation."""
 
-    def generate(self, services_doc: ServicesDoc) -> str:
+    def generate(self, services_docs: List[ServicesDoc]) -> str:
         """Generate Markdown documentation."""
-        if not services_doc:
+        if not services_docs:
             return "# Environment Variables Documentation\n\nNo documented environment variables found.\n"
 
-        output = ["# Environment Variables Documentation\n", f"Source file: `{services_doc.sourceFile}`\n"]
+        output = ["# Environment Variables Documentation\n"]
 
-        for service_doc in services_doc.services:
-            output.append(f"## Service: {service_doc.name}\n")
-
-            if not service_doc.env_vars:
-                output.append("No documented environment variables.\n")
+        for services_doc in services_docs:
+            if not services_doc.services:
                 continue
 
-            output.append("| Variable | Description | Default Value |")
-            output.append("|----------|-------------|---------------|")
+            output.append(f"## File: `{services_doc.sourceFile}`\n")
 
-            for env_var in service_doc.env_vars:
-                default_val = env_var.default_value if env_var.default_value is not None else ""
-                # Escape pipe characters in content
-                name = env_var.name.replace("|", "\\|") if env_var.name else ""
-                desc = env_var.description.replace("|", "\\|") if env_var.description else ""
-                default = default_val.replace("|", "\\|") if default_val else "-"
+            for service_doc in services_doc.services:
+                output.append(f"### Service: {service_doc.name}\n")
 
-                output.append(f"| `{name}` | {desc} | `{default}` |")
+                if not service_doc.env_vars:
+                    output.append("No documented environment variables.\n")
+                    continue
 
-            output.append("")  # Empty line between services
+                output.append("| Variable | Description | Default Value |")
+                output.append("|----------|-------------|---------------|")
+
+                for env_var in service_doc.env_vars:
+                    default_val = env_var.default_value if env_var.default_value is not None else ""
+                    # Escape pipe characters in content
+                    name = env_var.name.replace("|", "\\|") if env_var.name else ""
+                    desc = env_var.description.replace("|", "\\|") if env_var.description else ""
+                    default = default_val.replace("|", "\\|") if default_val else "-"
+
+                    output.append(f"| `{name}` | {desc} | `{default}` |")
+
+                output.append("")  # Empty line between services
+
+            output.append("")  # Empty line between files
 
         return "\n".join(output).rstrip('\n')
 
 
+def find_compose_files(directory: str) -> List[str]:
+    """Find all Docker Compose files in a directory."""
+    compose_files = []
+
+    # Common Docker Compose file patterns
+    patterns = [
+        'docker-compose.yml',
+        'docker-compose.yaml',
+        'docker-compose.*.yml',
+        'docker-compose.*.yaml',
+        'compose.yml',
+        'compose.yaml'
+    ]
+
+    for pattern in patterns:
+        full_pattern = os.path.join(directory, pattern)
+        compose_files.extend(glob.glob(full_pattern))
+
+    # Remove duplicates
+    unique_files = list(set(compose_files))
+
+    # Sort with priority: main files first, then others alphabetically
+    return sort_compose_files(unique_files)
+
+
+def sort_compose_files(files: List[str]) -> List[str]:
+    """Sort compose files with main files first, then others alphabetically."""
+    if not files:
+        return files
+
+    main_files = []
+    override_files = []
+    other_files = []
+
+    for file in files:
+        basename = os.path.basename(file)
+        if basename in ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']:
+            main_files.append(file)
+        elif 'override' in basename:
+            override_files.append(file)
+        else:
+            other_files.append(file)
+
+    # Sort each category alphabetically
+    main_files.sort()
+    override_files.sort()
+    other_files.sort()
+
+    # Return in priority order
+    return main_files + override_files + other_files
+
+
+def parse_paths_from_string(paths_str: str) -> List[str]:
+    """Parse semicolon-separated paths string into list of paths."""
+    if not paths_str:
+        return []
+
+    paths = [path.strip() for path in paths_str.split(';')]
+    return [path for path in paths if path]  # Remove empty strings
+
+
+def collect_compose_files(paths: List[str]) -> List[str]:
+    """Collect all docker compose files from the given paths (files and directories)."""
+    all_files = []
+
+    for path in paths:
+        if os.path.isfile(path):
+            all_files.append(path)
+        elif os.path.isdir(path):
+            directory_files = find_compose_files(path)
+            all_files.extend(directory_files)
+        else:
+            print(f"Warning: Path not found, skipping: {path}", file=sys.stderr)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_files = []
+    for file in all_files:
+        abs_path = os.path.abspath(file)
+        if abs_path not in seen:
+            seen.add(abs_path)
+            unique_files.append(file)
+
+    return unique_files
+
+
 def main():
     """Main function."""
-    compose_file = None
+    compose_files = []
 
-    # 1. File was provided as an argument
-    if len(sys.argv) == 2 and os.path.isfile(sys.argv[1]):
-        compose_file = sys.argv[1]
+    # 1. Command line arguments take the highest precedence (support multiple paths)
+    if len(sys.argv) > 1:
+        paths = sys.argv[1:]
+        compose_files = collect_compose_files(paths)
 
-    # 2. File was provided by environment variables
-    if compose_file is None:
-        docker_compose_path = os.environ.get('DOCKER_COMPOSE_FILE_PATH')
-        docker_compose_name = os.environ.get('DOCKER_COMPOSE_FILE_NAME')
+    # 2. Environment variables take precedence over default paths
+    elif os.environ.get('DOCKER_COMPOSE_FILE_PATHS'):
+        docker_compose_paths = os.environ.get('DOCKER_COMPOSE_FILE_PATHS')
+        paths = parse_paths_from_string(docker_compose_paths)
 
-        if docker_compose_path:
-            if docker_compose_name:
-                # Check for a specific file name in the path
-                candidate_file = os.path.join(docker_compose_path, docker_compose_name)
-                if os.path.isfile(candidate_file):
-                    compose_file = candidate_file
-            else:
-                # Check for default docker-compose files in env path
-                for filename in ['docker-compose.yml', 'docker-compose.yaml']:
-                    candidate_file = os.path.join(docker_compose_path, filename)
-                    if os.path.isfile(candidate_file):
-                        compose_file = candidate_file
-                        break
+        if paths:
+            compose_files = collect_compose_files(paths)
+        else:
+            print("Error: DOCKER_COMPOSE_FILE_PATHS is set but empty")
+            sys.exit(1)
 
-    # 3. File was provided through default paths
-    if compose_file is None:
-        default_paths = [
-            '/data/docker-compose.yml',
-            '/data/docker-compose.yaml',
-            '/src/docker-compose.yml',
-            '/src/docker-compose.yaml'
-        ]
+    # 3. Fall back to default paths
+    if not compose_files:
+        default_paths = ['/data', '/src', '.']
+        compose_files = collect_compose_files(default_paths)
 
-        for path in default_paths:
-            if os.path.isfile(path):
-                compose_file = path
-                break
-
-    # If no file is found, show usage
-    if compose_file is None:
-        print("Usage: python docker_compose_docs.py <docker-compose.yml>")
-        print("Or set DOCKER_COMPOSE_FILE_PATH environment variable")
-        print("Optionally set DOCKER_COMPOSE_FILE_NAME for specific filename")
-        print("Default paths checked: /data/, /src/ (docker-compose.yml, docker-compose.yaml)")
+    # If no files are found, show usage
+    if not compose_files:
+        print("Usage: python docker_compose_docs.py <files-and-directories...>")
+        print("Or set DOCKER_COMPOSE_FILE_PATHS environment variable (semicolon-separated)")
+        print("Default paths checked: /data/, /src/, .")
+        print("Files are automatically excluded if they contain no documented environment variables.")
         sys.exit(1)
 
     try:
-        parser = DockerComposeParser(compose_file)
-        services = parser.parse()
+        doc_models = []
+
+        for compose_file in compose_files:
+            try:
+                parser = DockerComposeParser(compose_file)
+                doc_model = parser.parse()
+
+                # Only add if there are documented services (automatic filtering)
+                if doc_model.services:
+                    doc_models.append(doc_model)
+            except Exception as e:
+                print(f"Warning: Failed to parse {compose_file}: {e}", file=sys.stderr)
+                continue
+
+        if not doc_models:
+            print("# Environment Variables Documentation\n\nNo documented environment variables found in any files.\n")
+            return
 
         generator = MarkdownGenerator()
-        output = generator.generate(services)
+        output = generator.generate(doc_models)
 
         print(output)
 
