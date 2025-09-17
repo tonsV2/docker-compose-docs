@@ -22,5 +22,5 @@ class ServiceDoc:
 @dataclass
 class ServicesDoc:
     """Represents documentation for a list of services."""
-    sourceFile: str
+    source_file: str
     services: List[ServiceDoc]

@@ -22,14 +22,14 @@ class DockerComposeParser:
         services_docs = []
 
         if self.compose_content is None or 'services' not in self.compose_content:
-            return ServicesDoc(sourceFile=self.compose_file_path, services=[])
+            return ServicesDoc(source_file=self.compose_file_path, services=[])
 
         for service_name, service_config in self.compose_content['services'].items():
             env_vars = self._extract_env_vars_with_docs(service_name, service_config)
             if env_vars:
                 services_docs.append(ServiceDoc(name=service_name, env_vars=env_vars))
 
-        return ServicesDoc(sourceFile=self.compose_file_path, services=services_docs)
+        return ServicesDoc(source_file=self.compose_file_path, services=services_docs)
 
     def _load_compose_file(self) -> None:
         """Load and parse the Docker Compose file."""

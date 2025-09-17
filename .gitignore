@@ -1,2 +1,22 @@
-.idea
+# IDE files
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
 .env
+.venv
+env/
+venv/
+
+# Test and coverage
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/

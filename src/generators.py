@@ -29,7 +29,7 @@ class MarkdownGenerator(OutputGenerator):
             if not services_doc.services:
                 continue
 
-            output.append(f"## File: `{services_doc.sourceFile}`\n")
+            output.append(f"## File: `{services_doc.source_file}`\n")
 
             for service_doc in services_doc.services:
                 output.append(f"### Service: {service_doc.name}\n")
