@@ -52,7 +52,7 @@ class DockerComposeParser:
         self._load_compose_file()
         services_docs = []
 
-        if 'services' not in self.compose_content:
+        if self.compose_content is None or 'services' not in self.compose_content:
             return ServicesDoc(sourceFile=self.compose_file_path, services=[])
 
         for service_name, service_config in self.compose_content['services'].items():
@@ -130,6 +130,8 @@ class DockerComposeParser:
 
     def _get_service_raw_lines(self, service_name: str) -> List[str]:
         """Get raw lines for a specific service from the Docker Compose file."""
+        if self.raw_content is None:
+            return []
         lines = self.raw_content.split('\n')
         service_lines = []
         in_service = False
@@ -146,7 +148,7 @@ class DockerComposeParser:
                 current_indent = len(line) - len(line.lstrip()) if line.strip() else float('inf')
 
                 # Check if we've moved to another service at the same level
-                if line.strip() and current_indent <= service_indent and ':' in line:
+                if line.strip() and service_indent is not None and current_indent <= service_indent and ':' in line:
                     break
 
                 service_lines.append(line)
@@ -402,7 +404,10 @@ def main():
     # 2. Environment variables take precedence over default paths
     elif os.environ.get('DOCKER_COMPOSE_FILE_PATHS'):
         docker_compose_paths = os.environ.get('DOCKER_COMPOSE_FILE_PATHS')
-        paths = parse_paths_from_string(docker_compose_paths)
+        if docker_compose_paths is not None:
+            paths = parse_paths_from_string(docker_compose_paths)
+        else:
+            paths = []
 
         if paths:
             compose_files = collect_compose_files(paths)
