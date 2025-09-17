@@ -30,6 +30,12 @@ class ServiceDoc:
     name: str
     env_vars: List[EnvVarDoc]
 
+@dataclass
+class ServicesDoc:
+    """Represents documentation for a list of services."""
+    sourceFile: str
+    services: List[ServiceDoc]
+
 
 class DockerComposeParser:
     """Parses Docker Compose files and extracts environment variable documentation."""
@@ -39,20 +45,20 @@ class DockerComposeParser:
         self.compose_content = None
         self.raw_content = None
 
-    def parse(self) -> List[ServiceDoc]:
+    def parse(self) -> ServicesDoc:
         """Parse the Docker Compose file and return service documentation."""
         self._load_compose_file()
         services_docs = []
 
         if 'services' not in self.compose_content:
-            return services_docs
+            return ServicesDoc(sourceFile=self.compose_file_path, services=[])
 
         for service_name, service_config in self.compose_content['services'].items():
             env_vars = self._extract_env_vars_with_docs(service_name, service_config)
             if env_vars:
                 services_docs.append(ServiceDoc(name=service_name, env_vars=env_vars))
 
-        return services_docs
+        return ServicesDoc(sourceFile=self.compose_file_path, services=services_docs)
 
     def _load_compose_file(self) -> None:
         """Load and parse the Docker Compose file."""
@@ -224,7 +230,7 @@ class OutputGenerator(ABC):
     """Abstract base class for output generators."""
 
     @abstractmethod
-    def generate(self, services_docs: List[ServiceDoc]) -> str:
+    def generate(self, services_doc: ServicesDoc) -> str:
         """Generate output from service documentation."""
         pass
 
@@ -232,14 +238,14 @@ class OutputGenerator(ABC):
 class MarkdownGenerator(OutputGenerator):
     """Generates Markdown documentation from service documentation."""
 
-    def generate(self, services_docs: List[ServiceDoc]) -> str:
+    def generate(self, services_doc: ServicesDoc) -> str:
         """Generate Markdown documentation."""
-        if not services_docs:
+        if not services_doc:
             return "# Environment Variables Documentation\n\nNo documented environment variables found.\n"
 
-        output = ["# Environment Variables Documentation\n"]
+        output = ["# Environment Variables Documentation\n", f"Source file: `{services_doc.sourceFile}`\n"]
 
-        for service_doc in services_docs:
+        for service_doc in services_doc.services:
             output.append(f"## Service: {service_doc.name}\n")
 
             if not service_doc.env_vars:
@@ -314,10 +320,10 @@ def main():
 
     try:
         parser = DockerComposeParser(compose_file)
-        services_docs = parser.parse()
+        services = parser.parse()
 
         generator = MarkdownGenerator()
-        output = generator.generate(services_docs)
+        output = generator.generate(services)
 
         print(output)
 
