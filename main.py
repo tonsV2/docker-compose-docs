@@ -30,6 +30,7 @@ class ServiceDoc:
     name: str
     env_vars: List[EnvVarDoc]
 
+
 @dataclass
 class ServicesDoc:
     """Represents documentation for a list of services."""
@@ -70,6 +71,34 @@ class DockerComposeParser:
             raise FileNotFoundError(f"Docker Compose file not found: {self.compose_file_path}")
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML in Docker Compose file: {e}")
+
+    def _parse_default_value(self, value: Optional[str]) -> Optional[str]:
+        """
+        Parse Docker Compose variable substitution syntax to extract default values.
+
+        Docker Compose supports these patterns:
+        - ${VAR:-default} -> "default" (if VAR is unset or empty)
+        - ${VAR-default} -> "default" (if VAR is unset)
+        - ${VAR} or $VAR -> None (no default provided)
+        - regular_value -> "regular_value" (literal value)
+        """
+        if value is None:
+            return None
+
+        # Pattern for Docker Compose variable substitution with defaults
+        # Only matches: ${VAR:-default} and ${VAR-default}
+        default_pattern = r'\$\{[^}]+(-|:-)([^}]*)\}'
+        match = re.search(default_pattern, value)
+
+        if match:
+            return match.group(2)
+
+        # Check if it's a variable reference without default: ${VAR} or $VAR
+        if re.match(r'^\$\{[^}]+\}$|^\$[A-Za-z_][A-Za-z0-9_]*$', value):
+            return None
+
+        # If it's not a variable substitution, return the value as-is
+        return value
 
     def _extract_env_vars_with_docs(self, service_name: str, service_config: Dict[str, Any]) -> List[EnvVarDoc]:
         """Extract environment variables with documentation comments for a service."""
@@ -134,12 +163,8 @@ class DockerComposeParser:
         for var_name, var_value in env_config.items():
             comment = self._find_comment_for_var(var_name, service_lines, start_line)
             if comment:
-                default_value = str(var_value) if var_value is not None else None
-                env_vars.append(EnvVarDoc(
-                    name=var_name,
-                    description=comment,
-                    default_value=default_value
-                ))
+                parsed_default = self._parse_default_value(str(var_value)) if var_value is not None else None
+                env_vars.append(EnvVarDoc(var_name, comment, parsed_default))
 
         return env_vars
 
@@ -170,7 +195,8 @@ class DockerComposeParser:
             comment = self._find_comment_for_var(var_name, service_lines, start_line)
 
             if comment:
-                env_vars.append(EnvVarDoc(var_name, comment, var_value))
+                parsed_default = self._parse_default_value(var_value) if var_value is not None else None
+                env_vars.append(EnvVarDoc(var_name, comment, parsed_default))
 
         return env_vars
 
