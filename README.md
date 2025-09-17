@@ -10,7 +10,7 @@ Git clone this repository and run the below command to generate documentation fo
 
 ```bash
 # Local execution
-python -m src.cli tests/ > docs.md
+python -m src.cli examples/ > docs.md
 
 # Or using Docker
 docker compose run --rm app > docs.md
