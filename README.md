@@ -9,12 +9,10 @@ This tool is inspired by [helm-docs](https://github.com/norwoodj/helm-docs).
 Git clone this repository and run the below command to generate documentation for the Docker Compose file in the `tests` directory:
 
 ```bash
-./main.py tests/docker-compose.yml > docs.md
-```
+# Local execution
+python -m src.cli tests/ > docs.md
 
-Or
-
-```bash
+# Or using Docker
 docker compose run --rm app > docs.md
 ```
 

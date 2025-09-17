@@ -1,0 +1,1 @@
+"""Tests for Docker Compose documentation generator."""
