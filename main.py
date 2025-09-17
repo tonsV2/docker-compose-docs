@@ -292,7 +292,7 @@ class MarkdownGenerator(OutputGenerator):
 
             output.append("")  # Empty line between services
 
-        return "\n".join(output)
+        return "\n".join(output).rstrip('\n')
 
 
 def main():
