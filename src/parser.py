@@ -13,13 +13,13 @@ class DockerComposeParser:
 
     def __init__(self, compose_file_path: str):
         self.compose_file_path = compose_file_path
-        self.compose_content = None
-        self.raw_content = None
+        self.compose_content: Optional[Dict[str, Any]] = None
+        self.raw_content: Optional[str] = None
 
     def parse(self) -> ServicesDoc:
         """Parse the Docker Compose file and return service documentation."""
         self._load_compose_file()
-        services_docs = []
+        services_docs: List[ServiceDoc] = []
 
         if self.compose_content is None or 'services' not in self.compose_content:
             return ServicesDoc(source_file=self.compose_file_path, services=[])
@@ -72,7 +72,7 @@ class DockerComposeParser:
 
     def _extract_env_vars_with_docs(self, service_name: str, service_config: Dict[str, Any]) -> List[EnvVarDoc]:
         """Extract environment variables with documentation comments for a service."""
-        env_vars = []
+        env_vars: List[EnvVarDoc] = []
 
         if 'environment' not in service_config:
             return env_vars
@@ -127,7 +127,7 @@ class DockerComposeParser:
     def _parse_dict_environment(self, env_config: Dict[str, Any], service_lines: List[str], start_line: int) -> List[
         EnvVarDoc]:
         """Parse dictionary-style environment configuration."""
-        env_vars = []
+        env_vars: List[EnvVarDoc] = []
 
         if not env_config:
             return env_vars
@@ -143,7 +143,7 @@ class DockerComposeParser:
     def _parse_list_environment(self, env_config: List[str], service_lines: List[str], start_line: int) -> List[
         EnvVarDoc]:
         """Parse list-style environment configuration."""
-        env_vars = []
+        env_vars: List[EnvVarDoc] = []
 
         if not env_config:
             return env_vars

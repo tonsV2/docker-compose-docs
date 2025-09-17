@@ -1,5 +1,6 @@
 """Tests for Docker Compose parser."""
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -36,7 +37,7 @@ services:
             parser = DockerComposeParser(file_path)
             result = parser.parse()
 
-            assert result.source_file == file_path
+            assert result.source_file == os.path.basename(file_path)
             assert len(result.services) == 1
 
             service = result.services[0]
@@ -137,7 +138,7 @@ volumes:
             parser = DockerComposeParser(file_path)
             result = parser.parse()
 
-            assert result.source_file == file_path
+            assert result.source_file == os.path.basename(file_path)
             assert result.services == []
 
         finally:

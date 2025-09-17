@@ -1,5 +1,6 @@
 """Data models for Docker Compose documentation."""
 
+import os
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -24,3 +25,7 @@ class ServicesDoc:
     """Represents documentation for a list of services."""
     source_file: str
     services: List[ServiceDoc]
+
+    def __post_init__(self):
+        """Normalize the source_file to just the basename."""
+        self.source_file = os.path.basename(self.source_file)
