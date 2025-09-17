@@ -95,7 +95,7 @@ class DockerComposeParser:
             return match.group(2)
 
         # Check if it's a variable reference without default: ${VAR} or $VAR
-        if re.match(r'^\$\{[^}]+\}$|^\$[A-Za-z_][A-Za-z0-9_]*$', value):
+        if re.match(r'^\$\{[^}]+}$|^\$[A-Za-z_][A-Za-z0-9_]*$', value):
             return None
 
         # If it's not a variable substitution, return the value as-is
