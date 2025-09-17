@@ -286,7 +286,7 @@ class MarkdownGenerator(OutputGenerator):
                 # Escape pipe characters in content
                 name = env_var.name.replace("|", "\\|") if env_var.name else ""
                 desc = env_var.description.replace("|", "\\|") if env_var.description else ""
-                default = default_val.replace("|", "\\|") if default_val else ""
+                default = default_val.replace("|", "\\|") if default_val else "-"
 
                 output.append(f"| `{name}` | {desc} | `{default}` |")
 
