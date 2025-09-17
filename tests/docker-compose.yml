@@ -10,7 +10,7 @@ services:
   api:
     image: myapi
     environment:
-      # -- API key for external service
-      - API_KEY=default-key
+      # -- API key for external service, no default value
+      - API_KEY=${API_KEY}
       - # -- Debug mode flag. Can be true | false
       - DEBUG=${DEBUG-false}
