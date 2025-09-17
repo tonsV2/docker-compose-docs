@@ -6,7 +6,7 @@ This tool is inspired by [helm-docs](https://github.com/norwoodj/helm-docs).
 
 ## Quick start
 
-Git clone this repository and run the below command to generate documentation for the Docker Compose file in the `tests` directory:
+Git clone this repository and run the below command to generate documentation for the Docker Compose file in the `examples` directory:
 
 ```bash
 python -m src.cli examples/ > docs.md
