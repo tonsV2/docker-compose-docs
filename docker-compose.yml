@@ -5,4 +5,5 @@ services:
     volumes:
       - .:/src:ro
     environment:
+      # -- Paths to docker-compose.yml files
       DOCKER_COMPOSE_FILE_PATHS: /src/examples
