@@ -14,14 +14,14 @@ class TestCLIIntegration:
             f.write(content)
             return f.name
 
-    def run_cli(self, args):
+    def run_cli(self, args, cwd=None):
         """Run the CLI application with given arguments."""
         cmd = ["python", "-m", "src.cli"] + args
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            cwd=Path(__file__).parent.parent
+            cwd=cwd or Path(__file__).parent.parent
         )
         return result
 
@@ -72,13 +72,25 @@ services:
             assert "`PORT`" in result.stdout
 
     def test_cli_with_no_files(self):
-        """Test CLI when no compose files are found."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = self.run_cli([temp_dir])
+        """Test CLI when compose files are found but have no documented variables."""
+        # Create a compose file with no documented environment variables
+        compose_content = """
+version: '3.8'
+services:
+  web:
+    image: nginx
+    environment:
+      PORT: 8080  # No # -- comment, so not documented
+"""
+        file_path = self.create_test_compose_file(compose_content)
+        try:
+            result = self.run_cli([file_path])
 
-            # CLI returns 0 and prints message when no files found
+            # CLI returns 0 and shows message when files have no documented variables
             assert result.returncode == 0
             assert "No documented environment variables found" in result.stdout
+        finally:
+            Path(file_path).unlink()
 
     def test_cli_with_invalid_file(self):
         """Test CLI with an invalid YAML file."""

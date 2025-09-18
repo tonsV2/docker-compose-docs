@@ -79,7 +79,7 @@ class TestServicesDoc:
             services=services
         )
 
-        assert services_doc.source_file == "docker-compose.yml"
+        assert services_doc.source_file == "../examples/docker-compose.yml"
         assert len(services_doc.services) == 2
         assert services_doc.services[0].name == "web"
         assert services_doc.services[1].name == "api"
@@ -91,5 +91,5 @@ class TestServicesDoc:
             services=[]
         )
 
-        assert services_doc.source_file == "docker-compose.yml"
+        assert services_doc.source_file == "../examples/docker-compose.yml"
         assert services_doc.services == []

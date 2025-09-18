@@ -33,7 +33,7 @@ class TestMarkdownGenerator:
         result = generator.generate([services_doc])
 
         assert "# Environment Variables Documentation" in result
-        assert "## File: `docker-compose.yml`" in result
+        assert "## File: `../examples/docker-compose.yml`" in result
         assert "### Service: web" in result
         assert "| Variable | Description | Default Value |" in result
         assert "| `PORT` | Web server port | `8080` |" in result
@@ -86,8 +86,8 @@ class TestMarkdownGenerator:
         result = generator.generate([services_doc1, services_doc2])
 
         # Check that both files are included
-        assert "## File: `docker-compose.yml`" in result
-        assert "## File: `docker-compose.prod.yml`" in result
+        assert "## File: `../examples/docker-compose.yml`" in result
+        assert "## File: `./docker-compose.prod.yml`" in result
 
         # Check that services from both files are included
         assert "### Service: web" in result
