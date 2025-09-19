@@ -45,9 +45,22 @@ Then run this from your Makefile, CI pipeline, or directly:
 docker compose run --rm compose-docs > ./docs/environment-variables.md
 ```
 
-## Sample output
+## Sample input/output
 
-Example of generated documentation:
+### Input
+
+```yaml
+services:
+  web:
+    image: nginx
+    environment:
+      # -- Web service port
+      APP_PORT: ${APP_PORT:-8080}
+      # -- Enable debug logging
+      DEBUG: false
+```
+
+### Output
 
 ```markdown
 # Environment Variables Documentation
