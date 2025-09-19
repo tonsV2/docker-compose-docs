@@ -14,7 +14,7 @@ class TestDockerComposeParser:
 
     def create_test_compose_file(self, content: str) -> str:
         """Create a temporary Docker Compose file with given content."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write(content)
             return f.name
 
@@ -179,7 +179,7 @@ services:
     def test_parse_invalid_yaml(self):
         """Test parsing a file with invalid YAML."""
         # Create a file with invalid YAML
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write("invalid: yaml: content: [\n")
             file_path = f.name
 
@@ -242,3 +242,47 @@ services:
         finally:
             Path(file_path).unlink()
 
+    def test_parse_yaml_anchors_with_documented_env_vars(self):
+        """Test parsing environment variables with YAML anchors and merge keys."""
+        compose_content = """
+x-database-image: &database-image
+  image: postgis/postgis:16
+
+services:
+  database:
+    <<: *database-image
+    restart: unless-stopped
+    environment:
+      # -- Postgres user password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # -- Database name
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+"""
+
+        file_path = self.create_test_compose_file(compose_content)
+        try:
+            parser = DockerComposeParser(file_path)
+            result = parser.parse()
+
+            assert len(result.services) == 1
+            service = result.services[0]
+            assert service.name == "database"
+
+            # Should find both documented environment variables
+            var_names = [var.name for var in service.env_vars]
+            assert "POSTGRES_PASSWORD" in var_names
+            assert "POSTGRES_DB" in var_names
+
+            # Check descriptions are correctly extracted
+            password_var = next(
+                var for var in service.env_vars if var.name == "POSTGRES_PASSWORD"
+            )
+            assert password_var.description == "Postgres user password"
+            assert password_var.default_value is None
+
+            db_var = next(var for var in service.env_vars if var.name == "POSTGRES_DB")
+            assert db_var.description == "Database name"
+            assert db_var.default_value == "mydb"
+
+        finally:
+            Path(file_path).unlink()
