@@ -4,7 +4,13 @@ import os
 import tempfile
 from pathlib import Path
 
-from src.utils import find_compose_files, sort_compose_files, parse_paths_from_string, collect_compose_files
+from src.utils import (
+    find_compose_files,
+    sort_compose_files,
+    parse_paths_from_string,
+    collect_compose_files,
+    collect_compose_files_from_globs,
+)
 
 
 class TestFindComposeFiles:
@@ -31,11 +37,13 @@ class TestFindComposeFiles:
                 "docker-compose.yml",
                 "docker-compose.yaml",
                 "docker-compose.prod.yml",
-                "compose.yml"
+                "compose.yml",
             ]
 
             for filename in files_to_create:
-                (temp_path / filename).write_text("version: '3.8'\nservices:\n  web: {}")
+                (temp_path / filename).write_text(
+                    "version: '3.8'\nservices:\n  web: {}"
+                )
 
             files = find_compose_files(temp_dir)
             assert len(files) == 4
@@ -77,7 +85,7 @@ class TestSortComposeFiles:
             "/path/docker-compose.override.yml",
             "/path/docker-compose.yml",
             "/path/compose.yml",
-            "/path/docker-compose.prod.yml"
+            "/path/docker-compose.prod.yml",
         ]
 
         sorted_files = sort_compose_files(files)
@@ -200,3 +208,65 @@ class TestCollectComposeFiles:
         # Check that warning was printed to stderr
         captured = capsys.readouterr()
         assert "Warning: Path not found" in captured.err
+
+
+class TestCollectComposeFilesFromGlobs:
+    """Test cases for collect_compose_files_from_globs function."""
+
+    def test_collect_compose_files_from_globs_basic(self):
+        """Test collecting compose files from glob patterns."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create compose file
+            compose_file = temp_path / "docker-compose.yml"
+            compose_file.write_text("version: '3.8'\nservices:\n  web: {}")
+
+            globs = [str(compose_file)]
+            files = collect_compose_files_from_globs(globs)
+
+            assert len(files) == 1
+            assert str(compose_file) in files
+
+    def test_collect_compose_files_from_globs_recursive(self):
+        """Test collecting compose files with recursive glob patterns."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create nested directory with compose file
+            nested_dir = temp_path / "overlays" / "monitoring"
+            nested_dir.mkdir(parents=True)
+            compose_file = nested_dir / "docker-compose.yml"
+            compose_file.write_text("version: '3.8'\nservices:\n  web: {}")
+
+            globs = [str(temp_path / "overlays" / "**" / "docker-compose.yml")]
+            files = collect_compose_files_from_globs(globs)
+
+            assert len(files) == 1
+            assert str(compose_file) in files
+
+    def test_collect_compose_files_from_globs_multiple(self):
+        """Test collecting compose files from multiple glob patterns."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create compose files
+            file1 = temp_path / "docker-compose.yml"
+            file1.write_text("version: '3.8'\nservices:\n  web: {}")
+
+            file2 = temp_path / "compose.yml"
+            file2.write_text("version: '3.8'\nservices:\n  api: {}")
+
+            globs = [str(file1), str(file2)]
+            files = collect_compose_files_from_globs(globs)
+
+            assert len(files) == 2
+            assert str(file1) in files
+            assert str(file2) in files
+
+    def test_collect_compose_files_from_globs_no_matches(self):
+        """Test behavior when no files match the glob patterns."""
+        globs = ["/nonexistent/**/*.yml"]
+        files = collect_compose_files_from_globs(globs)
+
+        assert files == []

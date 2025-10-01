@@ -12,12 +12,12 @@ def find_compose_files(directory: str) -> List[str]:
 
     # Common Docker Compose file patterns
     patterns = [
-        'docker-compose.yml',
-        'docker-compose.yaml',
-        'docker-compose.*.yml',
-        'docker-compose.*.yaml',
-        'compose.yml',
-        'compose.yaml'
+        "docker-compose.yml",
+        "docker-compose.yaml",
+        "docker-compose.*.yml",
+        "docker-compose.*.yaml",
+        "compose.yml",
+        "compose.yaml",
     ]
 
     for pattern in patterns:
@@ -42,9 +42,14 @@ def sort_compose_files(files: List[str]) -> List[str]:
 
     for file in files:
         basename = os.path.basename(file)
-        if basename in ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']:
+        if basename in [
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "compose.yml",
+            "compose.yaml",
+        ]:
             main_files.append(file)
-        elif 'override' in basename:
+        elif "override" in basename:
             override_files.append(file)
         else:
             other_files.append(file)
@@ -63,8 +68,28 @@ def parse_paths_from_string(paths_str: str) -> List[str]:
     if not paths_str:
         return []
 
-    paths = [path.strip() for path in paths_str.split(';')]
+    paths = [path.strip() for path in paths_str.split(";")]
     return [path for path in paths if path]  # Remove empty strings
+
+
+def collect_compose_files_from_globs(globs: List[str]) -> List[str]:
+    """Collect all docker compose files matching the given glob patterns."""
+    all_files = []
+
+    for glob_pattern in globs:
+        files = glob.glob(glob_pattern, recursive=True)
+        all_files.extend(files)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_files = []
+    for file in all_files:
+        abs_path = os.path.abspath(file)
+        if abs_path not in seen:
+            seen.add(abs_path)
+            unique_files.append(file)
+
+    return sort_compose_files(unique_files)
 
 
 def collect_compose_files(paths: List[str]) -> List[str]:
