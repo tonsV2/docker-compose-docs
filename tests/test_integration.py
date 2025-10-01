@@ -10,7 +10,7 @@ class TestCLIIntegration:
 
     def create_test_compose_file(self, content: str) -> str:
         """Create a temporary Docker Compose file with given content."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write(content)
             return f.name
 
@@ -18,10 +18,7 @@ class TestCLIIntegration:
         """Run the CLI application with given arguments."""
         cmd = ["python", "-m", "src.cli"] + args
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=cwd or Path(__file__).parent.parent
+            cmd, capture_output=True, text=True, cwd=cwd or Path(__file__).parent.parent
         )
         return result
 
@@ -62,7 +59,7 @@ services:
   app:
     environment:
       # -- Application port
-      PORT: 3000
+      PORT: ${PORT:-3000}
 """)
 
             result = self.run_cli([temp_dir])
@@ -95,7 +92,7 @@ services:
     def test_cli_with_invalid_file(self):
         """Test CLI with an invalid YAML file."""
         # Create a file with invalid YAML
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False) as f:
             f.write("invalid: yaml: content: [\n")
             file_path = f.name
 
@@ -117,7 +114,7 @@ services:
   web:
     environment:
       # -- Web port
-      PORT: 8080
+      PORT: ${PORT:-8080}
 """
 
         compose_content2 = """
@@ -126,7 +123,7 @@ services:
   api:
     environment:
       # -- API port
-      PORT: 3000
+      PORT: ${PORT:-3000}
 """
 
         file1 = self.create_test_compose_file(compose_content1)
@@ -153,7 +150,7 @@ services:
   test:
     environment:
       # -- Test variable
-      TEST_VAR: value
+      TEST_VAR: ${TEST_VAR:-value}
 """
 
         file_path = self.create_test_compose_file(compose_content)
@@ -162,7 +159,7 @@ services:
 
             assert result.returncode == 0
 
-            lines = result.stdout.strip().split('\n')
+            lines = result.stdout.strip().split("\n")
 
             # Check markdown table format
             assert "| Variable | Description | Default Value |" in lines
@@ -180,7 +177,7 @@ services:
   envtest:
     environment:
       # -- Environment test variable
-      ENV_VAR: test
+      ENV_VAR: ${ENV_VAR:-test}
 """
 
         file_path = self.create_test_compose_file(compose_content)
@@ -193,7 +190,7 @@ services:
                 capture_output=True,
                 text=True,
                 cwd=Path(__file__).parent.parent,
-                env={**env, **{"PATH": "/usr/local/bin:/usr/bin:/bin"}}
+                env={**env, **{"PATH": "/usr/local/bin:/usr/bin:/bin"}},
             )
 
             assert result.returncode == 0

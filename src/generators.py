@@ -1,9 +1,9 @@
 """Output generators for Docker Compose documentation."""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List
 
-from .models import ServicesDoc
+from .models import EnvVarDoc, ServicesDoc
 
 
 class OutputGenerator(ABC):
@@ -38,20 +38,50 @@ class MarkdownGenerator(OutputGenerator):
                     output.append("No documented environment variables.\n")
                     continue
 
-                output.append("| Variable | Description | Default Value |")
-                output.append("|----------|-------------|---------------|")
-
+                parent_property_groups: Dict[str, List[EnvVarDoc]] = {}
                 for env_var in service_doc.env_vars:
-                    default_val = env_var.default_value if env_var.default_value is not None else ""
-                    # Escape pipe characters in content
-                    name = env_var.name.replace("|", "\\|") if env_var.name else ""
-                    desc = env_var.description.replace("|", "\\|") if env_var.description else ""
-                    default = default_val.replace("|", "\\|") if default_val else "-"
+                    prop = env_var.parent_property or "other"
+                    if prop not in parent_property_groups:
+                        parent_property_groups[prop] = []
+                    parent_property_groups[prop].append(env_var)
 
-                    output.append(f"| `{name}` | {desc} | `{default}` |")
+                property_names = list(parent_property_groups.keys())
+                for i, prop_name in enumerate(property_names):
+                    if prop_name != "other":
+                        output.append(f"#### {prop_name.title()}\n")
+                    else:
+                        output.append("#### Other\n")
 
-                output.append("")  # Empty line between services
+                    output.append("| Variable | Description | Default Value |")
+                    output.append("|----------|-------------|---------------|")
 
-            output.append("")  # Empty line between files
+                    vars_in_prop = parent_property_groups[prop_name]
+                    for env_var in vars_in_prop:
+                        default_val = (
+                            env_var.default_value
+                            if env_var.default_value is not None
+                            else ""
+                        )
+                        # Escape pipe characters in content
+                        name = env_var.name.replace("|", "\\|") if env_var.name else ""
+                        desc = (
+                            env_var.description.replace("|", "\\|")
+                            if env_var.description
+                            else ""
+                        )
+                        default = (
+                            default_val.replace("|", "\\|") if default_val else "-"
+                        )
 
-        return "\n".join(output).rstrip('\n')
+                        output.append(f"| `{name}` | {desc} | `{default}` |")
+
+                    if i < len(property_names) - 1:
+                        output.append("")
+
+                if service_doc != services_doc.services[-1]:
+                    output.append("")
+
+            if services_doc != services_docs[-1]:
+                output.append("")
+
+        return "\n".join(output).rstrip("\n")

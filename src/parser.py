@@ -1,11 +1,22 @@
 """Docker Compose file parser for environment variable documentation."""
 
+import dataclasses
 import re
 from typing import Dict, List, Any, Optional
 
-import yaml
+from ruamel.yaml import YAML
 
 from .models import EnvVarDoc, ServiceDoc, ServicesDoc
+
+
+@dataclasses.dataclass
+class VariableInfo:
+    """Internal representation of variable information during parsing."""
+
+    name: str
+    default: Optional[str]
+    yaml_path: List[str]
+    description: str = ""
 
 
 class DockerComposeParser:
@@ -19,28 +30,236 @@ class DockerComposeParser:
     def parse(self) -> ServicesDoc:
         """Parse the Docker Compose file and return service documentation."""
         self._load_compose_file()
-        services_docs: List[ServiceDoc] = []
 
         if self.compose_content is None or "services" not in self.compose_content:
             return ServicesDoc(source_file=self.compose_file_path, services=[])
 
-        for service_name, service_config in self.compose_content["services"].items():
-            env_vars = self._extract_env_vars_with_docs(service_name, service_config)
-            if env_vars:
-                services_docs.append(ServiceDoc(name=service_name, env_vars=env_vars))
+        all_env_vars = self._scan_global_env_vars()
+
+        services_docs: List[ServiceDoc] = []
+        service_vars: Dict[str, List[EnvVarDoc]] = {}
+
+        for env_var in all_env_vars:
+            service_name = env_var.get("service_name", "unknown")
+            if service_name not in service_vars:
+                service_vars[service_name] = []
+            service_vars[service_name].append(env_var["env_var"])
+
+        for service_name, env_vars in service_vars.items():
+            services_docs.append(ServiceDoc(name=service_name, env_vars=env_vars))
 
         return ServicesDoc(source_file=self.compose_file_path, services=services_docs)
 
     def _load_compose_file(self) -> None:
         """Load and parse the Docker Compose file."""
         try:
+            yaml_parser = YAML()
             with open(self.compose_file_path, "r", encoding="utf-8") as f:
                 self.raw_content = f.read()
-                self.compose_content = yaml.safe_load(self.raw_content)
+                self.compose_content = yaml_parser.load(self.raw_content)
         except FileNotFoundError:
             raise FileNotFoundError(f"Docker Compose file not found: {self.compose_file_path}")
-        except yaml.YAMLError as e:
+        except Exception as e:
             raise ValueError(f"Invalid YAML in Docker Compose file: {e}")
+
+    def _scan_global_env_vars(self) -> List[Dict[str, Any]]:
+        """Scan entire file for documented environment variables using ruamel.yaml."""
+        if not self.compose_content or not self.raw_content:
+            return []
+
+        documented_vars = self._find_variables_with_metadata()
+
+        # Group by service
+        env_vars = []
+        for var_info in documented_vars:
+            service_name = self._extract_service_from_path(var_info.yaml_path)
+            parent_property = self._extract_property_from_path(var_info.yaml_path)
+            env_var = EnvVarDoc(var_info.name, var_info.description, var_info.default, parent_property)
+            env_vars.append({"service_name": service_name, "env_var": env_var})
+
+        return env_vars
+
+    def _find_variables_with_metadata(self) -> List[VariableInfo]:
+        """Find all variables and associate comments."""
+        variables: List[VariableInfo] = []
+
+        if (
+                self.compose_content is not None
+                and hasattr(self.compose_content, "get")
+                and "services" in self.compose_content
+        ):
+            services = self.compose_content["services"]
+
+            for service_name, service_config in services.items():
+                if hasattr(service_config, "items"):
+                    for prop_name, prop_value in service_config.items():
+                        if isinstance(prop_value, str) and "${" in prop_value:
+                            vars_in_value = self._extract_vars_from_string(prop_value)
+                            for var_info in vars_in_value:
+                                name = var_info["name"]
+                                default = var_info.get("default")
+                                yaml_path = ["services", service_name, prop_name]
+                                variables.append(self._create_variable_info(name, default, yaml_path))
+                        elif isinstance(prop_value, list):
+                            for i, item in enumerate(prop_value):
+                                if isinstance(item, str) and "${" in item:
+                                    vars_in_value = self._extract_vars_from_string(item)
+                                    for var_info in vars_in_value:
+                                        name = var_info["name"]
+                                        default = var_info.get("default")
+                                        yaml_path = ["services", service_name, prop_name, str(i)]
+                                        variables.append(self._create_variable_info(name, default, yaml_path))
+                        elif isinstance(prop_value, dict):
+                            # Handle nested mappings like environment
+                            self._process_nested_mapping(
+                                prop_value,
+                                ["services", service_name, prop_name],
+                                variables,
+                            )
+
+        self._associate_comments_with_variables_text(variables)
+
+        return variables
+
+    def _create_variable_info(
+            self, name: str, default: Optional[str], yaml_path: List[str]
+    ) -> VariableInfo:
+        """Create a VariableInfo object."""
+        return VariableInfo(
+            name=name, default=default, yaml_path=yaml_path, description=""
+        )
+
+    def _associate_comments_with_variables_text(
+            self, variables: List[VariableInfo]
+    ) -> None:
+        """Associate comments with variables using text analysis."""
+        if not self.raw_content:
+            return
+
+        lines = self.raw_content.split("\n")
+        line_to_vars: Dict[int, List[VariableInfo]] = {}
+
+        # Build map of line numbers to variables
+        for var_info in variables:
+            var_line = self._find_variable_line(var_info, lines)
+            if var_line is not None:
+                if var_line not in line_to_vars:
+                    line_to_vars[var_line] = []
+                line_to_vars[var_line].append(var_info)
+
+        # Associate comments with variables
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if line.strip().startswith("# --"):
+                comments = []
+                while i < len(lines) and lines[i].strip().startswith("# --"):
+                    comment_text = lines[i].strip()[4:].strip()
+                    if comment_text:
+                        comments.append(comment_text)
+                    i += 1
+
+                # Associate with immediate next line
+                if i < len(lines):
+                    next_line = lines[i]
+                    if next_line.strip() and not next_line.strip().startswith("#"):
+                        if i in line_to_vars:
+                            for var_info in line_to_vars[i]:
+                                var_info.description = " ".join(comments)
+            else:
+                i += 1
+
+    def _process_nested_mapping(self, mapping: Any, current_path: List[str], variables: List[VariableInfo]) -> None:
+        """Process nested mappings like environment sections."""
+        if hasattr(mapping, "items"):
+            for key, value in mapping.items():
+                if isinstance(value, str) and "${" in value:
+                    vars_in_value = self._extract_vars_from_string(value)
+                    for var_info in vars_in_value:
+                        variable_info = VariableInfo(var_info["name"], var_info.get("default"), current_path + [key],
+                                                     "")
+                        variables.append(variable_info)
+
+    def _find_variable_line(self, var_info: VariableInfo, lines: List[str]) -> Optional[int]:
+        """Find which line contains this variable using text search."""
+        var_name = var_info.name
+        for i, line in enumerate(lines):
+            if f"${{{var_name}" in line or f"${var_name}" in line:
+                return i
+        return None
+
+    def _extract_service_level_comments(self, mapping: Any) -> str:
+        """Extract service-level comments (appear before first key)."""
+        comments = []
+
+        if hasattr(mapping, "ca") and hasattr(mapping.ca, "comment"):
+            comment_tokens = mapping.ca.comment
+            if comment_tokens:
+                for token_list in comment_tokens:
+                    if token_list:
+                        for token in token_list:
+                            if hasattr(token, "value"):
+                                comment_text = token.value.strip()
+                                if comment_text.startswith("# --"):
+                                    comments.append(comment_text[4:].strip())
+
+        return " ".join(comments)
+
+    def _extract_comments_for_key(self, mapping: Any, key: str) -> str:
+        """Extract comments associated with a key in a YAML mapping."""
+        comments = []
+
+        # Check ruamel.yaml comment structure
+        if hasattr(mapping, "ca") and hasattr(mapping.ca, "items") and key in mapping.ca.items:
+            comment_tokens = mapping.ca.items[key]
+            if comment_tokens:
+                # comment_tokens is a list where each element can be a CommentToken or a list
+                for token_or_list in comment_tokens:
+                    if token_or_list:
+                        # Handle both single tokens and lists of tokens
+                        if hasattr(token_or_list, "value"):
+                            # Single CommentToken
+                            tokens = [token_or_list]
+                        else:
+                            # List of CommentTokens
+                            tokens = token_or_list
+
+                        for token in tokens:
+                            if hasattr(token, "value"):
+                                comment_text = token.value.strip()
+                                if comment_text.startswith("# --"):
+                                    comments.append(comment_text[4:].strip())
+
+        return " ".join(comments)
+
+    def _extract_service_from_path(self, yaml_path: List[str]) -> str:
+        """Extract service name from YAML path."""
+        # For well-formed Docker Compose files, path is always ["services", service_name, ...]
+        return yaml_path[1] if len(yaml_path) > 1 else "unknown"
+
+    def _extract_property_from_path(self, yaml_path: List[str]) -> str:
+        """Extract the immediate parent property from YAML path."""
+        # For well-formed files, path is ["services", service_name, property_name, ...]
+        # The property is always at index 2
+        return yaml_path[2] if len(yaml_path) > 2 else "unknown"
+
+    def _extract_vars_from_string(self, text: str) -> List[Dict[str, str]]:
+        """Extract all ${VAR} patterns from a line."""
+        import re
+
+        vars_found = []
+        # Find all ${...} patterns
+        var_pattern = r"\$\{([^}]+)\}"
+        matches = re.findall(var_pattern, text)
+
+        for match in matches:
+            parts = match.split("-", 1)
+            if len(parts) == 2:
+                var = {"name": parts[0].rstrip(":").strip(), "default": parts[1].strip()}
+            else:
+                var = {"name": match.strip(), "default": None}
+            vars_found.append(var)
+        return vars_found
 
     def _parse_default_value(self, value: Optional[str]) -> Optional[str]:
         """
@@ -69,162 +288,3 @@ class DockerComposeParser:
 
         # If it's not a variable substitution, return the value as-is
         return value
-
-    def _extract_env_vars_with_docs(self, service_name: str, service_config: Dict[str, Any]) -> List[EnvVarDoc]:
-        """Extract environment variables with documentation comments for a service."""
-        env_vars: List[EnvVarDoc] = []
-
-        if "environment" not in service_config:
-            return env_vars
-
-        service_lines = self._get_service_raw_lines(service_name)
-
-        env_section_start = None
-        for i, line in enumerate(service_lines):
-            if re.match(r"\s*environment:\s*$", line):
-                env_section_start = i + 1
-                break
-
-        if env_section_start is None:
-            return env_vars
-
-        env_config = service_config["environment"]
-
-        if isinstance(env_config, dict):
-            env_vars.extend(self._parse_dict_environment(env_config, service_lines, env_section_start))
-        elif isinstance(env_config, list):
-            env_vars.extend(self._parse_list_environment(env_config, service_lines, env_section_start))
-
-        return env_vars
-
-    def _get_service_raw_lines(self, service_name: str) -> List[str]:
-        """Get raw lines for a specific service from the Docker Compose file."""
-        if self.raw_content is None:
-            return []
-        lines = self.raw_content.split("\n")
-        service_lines = []
-        in_service = False
-        service_indent = None
-
-        for line in lines:
-            # Only match service definitions at the proper indentation level (typically 2 spaces)
-            # This avoids matching dependency references that have the same service name
-            if re.match(rf"^\s{{2}}{re.escape(service_name)}:\s*$", line):
-                in_service = True
-                service_indent = len(line) - len(line.lstrip())
-                service_lines.append(line)
-                continue
-
-            if in_service:
-                current_indent = len(line) - len(line.lstrip()) if line.strip() else float("inf")
-
-                # Check if we've moved to another service at the same level
-                if line.strip() and service_indent is not None and current_indent <= service_indent and ":" in line:
-                    break
-
-                service_lines.append(line)
-
-        return service_lines
-
-    def _parse_dict_environment(self, env_config: Dict[str, Any], service_lines: List[str], start_line: int) -> List[
-        EnvVarDoc]:
-        """Parse dictionary-style environment configuration."""
-        env_vars: List[EnvVarDoc] = []
-
-        if not env_config:
-            return env_vars
-
-        for var_name, var_value in env_config.items():
-            comment = DockerComposeParser._find_comment_for_var(var_name, service_lines, start_line)
-            if comment:
-                parsed_default = self._parse_default_value(str(var_value)) if var_value is not None else None
-                env_vars.append(EnvVarDoc(var_name, comment, parsed_default))
-
-        return env_vars
-
-    def _parse_list_environment(self, env_config: List[str], service_lines: List[str], start_line: int) -> List[
-        EnvVarDoc]:
-        """Parse list-style environment configuration."""
-        env_vars: List[EnvVarDoc] = []
-
-        if not env_config:
-            return env_vars
-
-        for env_entry in env_config:
-            if not env_entry:
-                continue
-
-            if env_entry is None:
-                continue
-
-            env_entry_str = str(env_entry)
-
-            if "=" in env_entry_str:
-                var_name, var_value = env_entry_str.split("=", 1)
-            else:
-                var_name, var_value = env_entry_str, None
-
-            var_name = var_name.strip()
-
-            comment = DockerComposeParser._find_comment_for_var(var_name, service_lines, start_line)
-
-            if comment:
-                parsed_default = self._parse_default_value(var_value) if var_value is not None else None
-                env_vars.append(EnvVarDoc(var_name, comment, parsed_default))
-
-        return env_vars
-
-    @staticmethod
-    def _find_comment_for_var(var_name: str, service_lines: List[str], start_line: int) -> Optional[str]:
-        """Find the documentation comment for a specific environment variable."""
-        if not service_lines or start_line >= len(service_lines):
-            return None
-
-        # Look for the variable in the service lines
-        for i in range(start_line, len(service_lines)):
-            line = service_lines[i]
-
-            if not line:
-                continue
-
-            line_stripped = line.strip()
-            var_found = False
-
-            # Handle both list and dictionary environment formats:
-            # - VAR_NAME: value
-            # - - VAR_NAME=value
-            if ":" in line_stripped and not line_stripped.startswith("-"):
-                var_in_line = line_stripped.split(":")[0].strip()
-                var_found = var_in_line == var_name
-            elif line_stripped.startswith("- ") and "=" in line_stripped:
-                list_content = line_stripped[2:].strip()  # Remove "- "
-                var_in_line = list_content.split("=")[0].strip()
-                var_found = var_in_line == var_name
-
-            if var_found:
-                # Look backward for a comment, skipping YAML anchor lines
-                for j in range(i - 1, max(start_line - 1, -1), -1):
-                    if j < 0:
-                        break
-                    prev_line = service_lines[j].strip()
-
-                    if not prev_line:
-                        continue
-
-                    # Skip YAML anchor/merge lines: <<: *anchor_name
-                    if prev_line.startswith("<<:") or "<<:" in prev_line:
-                        continue
-
-                    # Check for regular comment: # -- description
-                    if prev_line.startswith("# --"):
-                        return prev_line[4:].strip()
-
-                    # Check for list comment: - # -- description
-                    if prev_line.startswith("- # --"):
-                        return prev_line[6:].strip()
-
-                    # Stop if we hit a non-comment line
-                    if not prev_line.startswith("#") and not prev_line.startswith("- #"):
-                        break
-
-        return None

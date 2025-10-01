@@ -52,12 +52,16 @@ docker compose run --rm compose-docs > ./docs/environment-variables.md
 ```yaml
 services:
   web:
-    image: nginx
+    # -- Image tag for the nginx docker image
+    image: nginx:${NGINX_VERSION:-latest}
+    ports:
+      # -- Host port number
+      - "${NGINX_PORT:-8080}:80"
     environment:
-      # -- Web service port
-      APP_PORT: ${APP_PORT:-8080}
-      # -- Enable debug logging
-      DEBUG: false
+      # -- Port number for the web server
+      PORT: ${PORT:-8080}
+      # -- Database connection string
+      DATABASE_URL: postgresql://localhost/myapp
 ```
 
 ### Output
@@ -69,8 +73,21 @@ services:
 
 ### Service: web
 
-| Variable   | Description           | Default Value |
-|------------|-----------------------|---------------|
-| `APP_PORT` | Web service port      | `8080`        |
-| `DEBUG`    | Enable debug logging  | `false`       |
+#### Image
+
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| `NGINX_VERSION` | Image tag for the nginx docker image | `latest` |
+
+#### Ports
+
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| `NGINX_PORT` | Host port number | `8080` |
+
+#### Environment
+
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| `PORT` | Port number for the web server | `8080` |
 ```

@@ -11,6 +11,7 @@ class EnvVarDoc:
     name: str
     description: str
     default_value: Optional[str] = None
+    parent_property: Optional[str] = None
 
 
 @dataclass
@@ -37,7 +38,7 @@ class ServicesDoc:
             rel_path = os.path.relpath(file_path, os.getcwd())
 
             # Add ./ prefix for files in current directory for clarity
-            if '/' not in rel_path and '\\' not in rel_path:
+            if "/" not in rel_path and "\\" not in rel_path:
                 return f"./{rel_path}"
 
             return rel_path

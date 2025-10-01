@@ -1,6 +1,10 @@
 services:
   web:
-    image: nginx
+    # -- Image tag for the nginx docker image
+    image: nginx:${NGINX_VERSION:-latest}
+    ports:
+      # -- Host port number
+      - "${NGINX_PORT:-8080}:80"
     environment:
       # -- Port number for the web server
       PORT: ${PORT:-8080}

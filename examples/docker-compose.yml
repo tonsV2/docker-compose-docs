@@ -12,5 +12,5 @@ services:
     environment:
       # -- API key for external service, no default value
       - API_KEY=${API_KEY}
-      - # -- Debug mode flag. Can be true | false
+      # -- Debug mode flag. Can be true | false
       - DEBUG=${DEBUG-false}

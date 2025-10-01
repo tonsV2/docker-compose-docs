@@ -45,19 +45,14 @@ services:
 
             service = result.services[0]
             assert service.name == "web"
-            assert len(service.env_vars) == 2
+            assert len(service.env_vars) == 1  # Only documented variables are included
 
-            # Check PORT variable
+            # Check PORT variable (only documented one)
             port_var = service.env_vars[0]
             assert port_var.name == "PORT"
             assert port_var.description == "Port number for the web server"
             assert port_var.default_value == "8080"
-
-            # Check DATABASE_URL variable
-            db_var = service.env_vars[1]
-            assert db_var.name == "DATABASE_URL"
-            assert db_var.description == "Database connection string"
-            assert db_var.default_value == "postgresql://localhost/myapp"
+            assert port_var.parent_property == "environment"
 
         finally:
             Path(file_path).unlink()
@@ -216,14 +211,14 @@ services:
             assert result == expected, f"Failed for value: {value}"
 
     def test_parse_comments_with_special_characters(self):
-        """Test parsing comments with special characters."""
+        """Test parsing comments with special characters and variable substitution."""
         compose_content = """
 version: '3.8'
 services:
   web:
     environment:
       # -- Variable with | pipe in description
-      SPECIAL_VAR: value
+      SPECIAL_VAR: ${SPECIAL_VAR:-default}
 """
 
         file_path = self.create_test_compose_file(compose_content)
@@ -238,6 +233,7 @@ services:
             env_var = service.env_vars[0]
             assert env_var.name == "SPECIAL_VAR"
             assert env_var.description == "Variable with | pipe in description"
+            assert env_var.default_value == "default"
 
         finally:
             Path(file_path).unlink()
