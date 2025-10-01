@@ -1,5 +1,6 @@
 """Integration tests for the complete application."""
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -183,14 +184,14 @@ services:
         file_path = self.create_test_compose_file(compose_content)
         try:
             # Set environment variable and run CLI without arguments
-            env = {"DOCKER_COMPOSE_FILE_PATHS": file_path}
+            env = {**os.environ, "DOCKER_COMPOSE_FILE_PATHS": file_path}
             cmd = ["python", "-m", "src.cli"]
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 cwd=Path(__file__).parent.parent,
-                env={**env, **{"PATH": "/usr/local/bin:/usr/bin:/bin"}},
+                env=env,
             )
 
             assert result.returncode == 0
