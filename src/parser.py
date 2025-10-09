@@ -34,7 +34,7 @@ class DockerComposeParser:
         if self.compose_content is None or "services" not in self.compose_content:
             return ServicesDoc(source_file=self.compose_file_path, services=[])
 
-        all_env_vars = self._scan_global_env_vars()
+        all_env_vars, service_descriptions = self._scan_global_env_vars()
 
         services_docs: List[ServiceDoc] = []
         service_vars: Dict[str, List[EnvVarDoc]] = {}
@@ -46,7 +46,12 @@ class DockerComposeParser:
             service_vars[service_name].append(env_var["env_var"])
 
         for service_name, env_vars in service_vars.items():
-            services_docs.append(ServiceDoc(name=service_name, env_vars=env_vars))
+            description = service_descriptions.get(service_name, "")
+            services_docs.append(
+                ServiceDoc(
+                    name=service_name, env_vars=env_vars, description=description
+                )
+            )
 
         return ServicesDoc(source_file=self.compose_file_path, services=services_docs)
 
@@ -62,12 +67,13 @@ class DockerComposeParser:
         except Exception as e:
             raise ValueError(f"Invalid YAML in Docker Compose file: {e}")
 
-    def _scan_global_env_vars(self) -> List[Dict[str, Any]]:
+    def _scan_global_env_vars(self) -> tuple[List[Dict[str, Any]], Dict[str, str]]:
         """Scan entire file for documented environment variables using ruamel.yaml."""
         if not self.compose_content or not self.raw_content:
-            return []
+            return [], {}
 
         documented_vars = self._find_variables_with_metadata()
+        service_descriptions = self._extract_service_descriptions()
 
         # Group by service
         env_vars = []
@@ -77,7 +83,7 @@ class DockerComposeParser:
             env_var = EnvVarDoc(var_info.name, var_info.description, var_info.default, parent_property)
             env_vars.append({"service_name": service_name, "env_var": env_var})
 
-        return env_vars
+        return env_vars, service_descriptions
 
     def _find_variables_with_metadata(self) -> List[VariableInfo]:
         """Find all variables and associate comments."""
@@ -121,17 +127,13 @@ class DockerComposeParser:
 
         return variables
 
-    def _create_variable_info(
-            self, name: str, default: Optional[str], yaml_path: List[str]
-    ) -> VariableInfo:
+    def _create_variable_info(self, name: str, default: Optional[str], yaml_path: List[str]) -> VariableInfo:
         """Create a VariableInfo object."""
         return VariableInfo(
             name=name, default=default, yaml_path=yaml_path, description=""
         )
 
-    def _associate_comments_with_variables_text(
-            self, variables: List[VariableInfo]
-    ) -> None:
+    def _associate_comments_with_variables_text(self, variables: List[VariableInfo]) -> None:
         """Associate comments with variables using text analysis."""
         if not self.raw_content:
             return
@@ -176,8 +178,12 @@ class DockerComposeParser:
                 if isinstance(value, str) and "${" in value:
                     vars_in_value = self._extract_vars_from_string(value)
                     for var_info in vars_in_value:
-                        variable_info = VariableInfo(var_info["name"], var_info.get("default"), current_path + [key],
-                                                     "")
+                        variable_info = VariableInfo(
+                            var_info["name"],
+                            var_info.get("default"),
+                            current_path + [key],
+                            "",
+                        )
                         variables.append(variable_info)
 
     def _find_variable_line(self, var_info: VariableInfo, lines: List[str]) -> Optional[int]:
@@ -205,12 +211,52 @@ class DockerComposeParser:
 
         return " ".join(comments)
 
+    def _extract_service_descriptions(self) -> Dict[str, str]:
+        """Extract descriptions for all services using text analysis."""
+        descriptions = {}
+        if not self.raw_content:
+            return descriptions
+
+        lines = self.raw_content.split("\n")
+        services_section_start = None
+
+        for i, line in enumerate(lines):
+            if line.strip() == "services:":
+                services_section_start = i
+                break
+
+        if services_section_start is None:
+            return descriptions
+
+        i = services_section_start + 1
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith("# --"):
+                # Collect comment lines
+                comments = []
+                while i < len(lines) and lines[i].strip().startswith("# --"):
+                    comment_text = lines[i].strip()[4:].strip()
+                    if comment_text:
+                        comments.append(comment_text)
+                    i += 1
+                # Next non-comment line should be a service name
+                if i < len(lines):
+                    next_line = lines[i].strip()
+                    if ":" in next_line and not next_line.startswith(" "):
+                        service_name = next_line.split(":")[0].strip()
+                        descriptions[service_name] = " ".join(comments)
+            elif (line and not line.startswith("#") and ":" in line and not line.startswith(" ")):
+                # Service definition without comment
+                pass
+            i += 1
+
+        return descriptions
+
     def _extract_comments_for_key(self, mapping: Any, key: str) -> str:
         """Extract comments associated with a key in a YAML mapping."""
         comments = []
 
-        # Check ruamel.yaml comment structure
-        if hasattr(mapping, "ca") and hasattr(mapping.ca, "items") and key in mapping.ca.items:
+        if (hasattr(mapping, "ca") and hasattr(mapping.ca, "items") and key in mapping.ca.items):
             comment_tokens = mapping.ca.items[key]
             if comment_tokens:
                 # comment_tokens is a list where each element can be a CommentToken or a list
@@ -255,7 +301,10 @@ class DockerComposeParser:
         for match in matches:
             parts = match.split("-", 1)
             if len(parts) == 2:
-                var = {"name": parts[0].rstrip(":").strip(), "default": parts[1].strip()}
+                var = {
+                    "name": parts[0].rstrip(":").strip(),
+                    "default": parts[1].strip(),
+                }
             else:
                 var = {"name": match.strip(), "default": None}
             vars_found.append(var)

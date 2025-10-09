@@ -1,4 +1,5 @@
 services:
+  # -- Example Nginx web service
   web:
     # -- Image tag for the nginx docker image
     image: nginx:${NGINX_VERSION:-latest}

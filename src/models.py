@@ -19,6 +19,7 @@ class ServiceDoc:
     """Represents documentation for a service and its environment variables."""
     name: str
     env_vars: List[EnvVarDoc]
+    description: str = ""
 
 
 @dataclass

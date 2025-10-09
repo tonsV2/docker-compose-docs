@@ -34,6 +34,9 @@ class MarkdownGenerator(OutputGenerator):
             for service_doc in services_doc.services:
                 output.append(f"### Service: {service_doc.name}\n")
 
+                if service_doc.description:
+                    output.append(f"{service_doc.description}\n")
+
                 if not service_doc.env_vars:
                     output.append("No documented environment variables.\n")
                     continue
