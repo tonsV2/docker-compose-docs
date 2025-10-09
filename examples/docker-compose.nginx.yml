@@ -9,5 +9,5 @@ services:
     environment:
       # -- Port number for the web server
       PORT: ${PORT:-8080}
-      # -- Database connection string
+      # Database connection string (this comment isn't parsed since it doesn't start with two dashes)
       DATABASE_URL: postgresql://localhost/myapp

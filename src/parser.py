@@ -26,6 +26,7 @@ class DockerComposeParser:
         self.compose_file_path = compose_file_path
         self.compose_content: Optional[Dict[str, Any]] = None
         self.raw_content: Optional[str] = None
+        self.warnings: List[str] = []
 
     def parse(self) -> ServicesDoc:
         """Parse the Docker Compose file and return service documentation."""
@@ -53,7 +54,7 @@ class DockerComposeParser:
                 )
             )
 
-        return ServicesDoc(source_file=self.compose_file_path, services=services_docs)
+        return ServicesDoc(self.compose_file_path, services_docs, self.warnings)
 
     def _load_compose_file(self) -> None:
         """Load and parse the Docker Compose file."""
@@ -155,21 +156,38 @@ class DockerComposeParser:
             line = lines[i]
             if line.strip().startswith("# --"):
                 comments = []
+                start_comment_line = i
                 while i < len(lines) and lines[i].strip().startswith("# --"):
                     comment_text = lines[i].strip()[4:].strip()
                     if comment_text:
                         comments.append(comment_text)
                     i += 1
 
-                # Associate with immediate next line
+                # Associate with the immediate next line
                 if i < len(lines):
                     next_line = lines[i]
                     if next_line.strip() and not next_line.strip().startswith("#"):
-                        if i in line_to_vars:
+                        if (
+                                next_line.startswith("  ")
+                                and ":" in next_line.strip()
+                                and not next_line.startswith("   ")
+                        ):
+                            # Service definition (indented with 2 spaces), comment is for service
+                            pass
+                        elif i in line_to_vars:
                             for var_info in line_to_vars[i]:
                                 var_info.description = " ".join(comments)
+                        else:
+                            self.warnings.append(f"Line {start_comment_line + 1}: Comment without associated variable")
             else:
                 i += 1
+
+        # Check for variables without comments
+        for var_info in variables:
+            if not var_info.description:
+                var_line = self._find_variable_line(var_info, lines)
+                if var_line is not None:
+                    self.warnings.append(f"Line {var_line + 1}: Variable '{var_info.name}' without comment")
 
     def _process_nested_mapping(self, mapping: Any, current_path: List[str], variables: List[VariableInfo]) -> None:
         """Process nested mappings like environment sections."""
@@ -245,7 +263,7 @@ class DockerComposeParser:
                     if ":" in next_line and not next_line.startswith(" "):
                         service_name = next_line.split(":")[0].strip()
                         descriptions[service_name] = " ".join(comments)
-            elif (line and not line.startswith("#") and ":" in line and not line.startswith(" ")):
+            elif line and not line.startswith("#") and ":" in line and not line.startswith(" "):
                 # Service definition without comment
                 pass
             i += 1
@@ -256,7 +274,7 @@ class DockerComposeParser:
         """Extract comments associated with a key in a YAML mapping."""
         comments = []
 
-        if (hasattr(mapping, "ca") and hasattr(mapping.ca, "items") and key in mapping.ca.items):
+        if hasattr(mapping, "ca") and hasattr(mapping.ca, "items") and key in mapping.ca.items:
             comment_tokens = mapping.ca.items[key]
             if comment_tokens:
                 # comment_tokens is a list where each element can be a CommentToken or a list

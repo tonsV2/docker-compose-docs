@@ -7,6 +7,7 @@ services:
       PORT: ${PORT:-8080}
       # -- Database connection string
       DATABASE_URL: postgresql://localhost/myapp
+      VARIABLE: ${MY_VARIABLE:-with-out-a-comment}
 
   # -- Example API service
   api:

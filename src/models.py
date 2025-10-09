@@ -1,7 +1,7 @@
 """Data models for Docker Compose documentation."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 
@@ -27,6 +27,7 @@ class ServicesDoc:
     """Represents documentation for a list of services."""
     source_file: str
     services: List[ServiceDoc]
+    warnings: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Normalize source_file to show appropriate directory context for clarity."""

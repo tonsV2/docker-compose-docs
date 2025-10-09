@@ -77,6 +77,9 @@ def main():
                 parser = DockerComposeParser(compose_file)
                 doc_model = parser.parse()
 
+                for warning in doc_model.warnings:
+                    print(f"Warning in {compose_file}: {warning}", file=sys.stderr)
+
                 # Only add if there are documented services (automatic filtering)
                 if doc_model.services:
                     doc_models.append(doc_model)
