@@ -7,9 +7,11 @@ services:
       PORT: ${PORT:-8080}
       # -- Database connection string
       DATABASE_URL: postgresql://localhost/myapp
+      # This comment isn't parsed since it doesn't start with two dashes
+      # And since the below contains a variable, a warning will be printed
       VARIABLE: ${MY_VARIABLE:-with-out-a-comment}
 
-  # -- Example API service
+  # This service description is not included in the docs because this comment doesn't start with two dashes
   api:
     image: myapi
     environment:
