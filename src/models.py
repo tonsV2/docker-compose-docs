@@ -33,12 +33,17 @@ class ServicesDoc:
         self.source_file = self._get_display_path(self.source_file)
 
     def _get_display_path(self, file_path: str) -> str:
-        """Get display path - just use the full relative path."""
+        """Get display path - map container paths to host paths for Docker."""
         try:
-            # Get relative path from current working directory
+            # Map Docker container paths back to host paths
+            if file_path.startswith("/src/"): # TODO: Shouldn't be hardcoded, get from a environment variable
+                host_path = "." + file_path[4:]  # /src -> .
+                return host_path
+
+            # For non-mounted paths, use the relative path from the current directory
             rel_path = os.path.relpath(file_path, os.getcwd())
 
-            # Add ./ prefix for files in current directory for clarity
+            # Add ./ prefix for files in the current directory for clarity
             if "/" not in rel_path and "\\" not in rel_path:
                 return f"./{rel_path}"
 
